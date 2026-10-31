@@ -869,11 +869,14 @@ namespace BveEx.Samples.VehiclePlugins.PanelController
 
 ### 5.3 进阶指引：使用 `DXDynamicTexture` 绘制车载液晶屏（TIMS / MON）
 
-如果仅靠图层移动和指针旋转无法满足需求（例如你需要绘制显示实时站名、限速曲线、车厢状态的现代列车 **TIMS / MON 车载液晶显示屏**），可以结合官方扩展 `BveEx.Extensions.DXDynamicTexture`：
-- 通过 `ITextureManager.Register(texFilePath, width, height)` 接管驾驶台面板上的某张贴图（如 `Element.DaytimeImageModel` 所使用的贴图文件）；
-- 利用 `GdiHelper` 或 `System.Drawing.Graphics`（GDI+）在内存中直接绘制文字、线条与图像，并实时提交至 Direct3D 显存。
+`DXDynamicTexture.dll` 提供动态贴图和鼠标交互 API，公开类型位于 `Zbx1425.DXDynamicTexture`。车载液晶屏可通过以下两种入口取得纹理句柄：
 
-有关 `DXDynamicTexture` 的完整 API 与绘图优化技巧，请查阅专项文档《[DXDynamicTexture (动态贴图与绘图上下文)](extensions/dynamic-texture.md)》。
+- 在目标贴图文件加载前调用静态方法 `TextureManager.Register(fileNameEnding, width, height)`，按文件后缀接管后续纹理加载。
+- 在 `ScenarioCreated` 中从 `e.Scenario.Vehicle.Panel.Elements` 选择面板元素，通过其 `DaytimeImageModel` 或 `NighttimeImageModel` 访问已创建的 `Model`，再调用 `TextureManager.Register(model, textureFileName)`。材质文件名与模型中的 `TextureFileName` 精确匹配。
+
+插件使用 `GDIHelper` 或其 `Graphics` 绘制文字、线条与图像，通过 `TextureHandle.Update()` 提交像素。GDI 辅助方法在 `BeginGDI()` 与 `EndGDI()` 之间执行，`Graphics` 绘图安排在 HDC 已释放阶段。模型共享纹理与插件绘图资源按各自所有权管理。
+
+完整 API、注册时机、资源释放及示例见 [DXDynamicTexture：动态贴图、绘图上下文与鼠标交互](extensions/dynamic-texture.md)。
 
 ---
 

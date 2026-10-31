@@ -98,7 +98,7 @@ BveEX 官方在 NuGet Gallery 上发布了插件开发所需的核心包。
 1. 在“解决方案资源管理器”中右键点击项目下的 **“引用 (References)”** → **“添加引用...”** → 点击底部的 **“浏览”**。
 2. 到 `<BVE 安装目录>\Input Devices\BveEx\<版本文件夹，如 2.0>\` 下选择所需文件：
    - 核心契约与类型库：`BveEx.PluginHost.dll`、`BveTypes.dll`（若需直接操作底层反射或打补丁，还可添加 `FastMember.dll`、`TypeWrapping.dll`）。
-   - 官方扩展库：进入子目录 `Extensions\`，按需选择 `BveEx.CoreExtensions.dll` 或 `DXDynamicTexture.dll`（对应命名空间 `BveEx.Extensions.DXDynamicTexture`）。
+   - 官方扩展库：进入子目录 `Extensions\`，按需选择 `BveEx.CoreExtensions.dll`（接口按功能分布在 `BveEx.Extensions.Native` 等命名空间）或 `DXDynamicTexture.dll`（公开绘图 API 位于 `Zbx1425.DXDynamicTexture`，扩展入口位于 `BveEx.Extensions.DXDynamicTexture`）。动态贴图的依赖、注册与完整示例见 [DXDynamicTexture 专题](extensions/dynamic-texture.md)。
 
 ### 3.4 ⚠️ 关键配置：将引用程序集的“复制本地”设为 `False`
 

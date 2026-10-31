@@ -1173,78 +1173,11 @@ namespace BveEx.Sample.StationController
 
 ### 7.2 结合 `DXDynamicTexture` 动态重绘地面 3D 模型贴图
 
-在车站发车信息屏（LED 揭示牌）、倒计时器、月台时钟等场景中，我们希望在运行期实时重绘地面 3D 模型上的某张贴图。通过 `Zbx1425.DXDynamicTexture` 扩展库（详见 [DXDynamicTexture 动态贴图与绘图上下文](./extensions/dynamic-texture.md)），只需在 `ScenarioCreated` 中从 `e.Scenario.Map.StructureModels` 取出目标 `Model` 并调用 `.Register("贴图相对路径")` 即可！
+`DXDynamicTexture.dll` 的公开绘图 API 位于 `Zbx1425.DXDynamicTexture`。地图插件在 `ScenarioCreated` 回调中从 `e.Scenario.Map.StructureModels` 取得目标模型，再调用 `model.Register(textureFileName)`，按模型材质中的文件名绑定已有纹理。该入口采用区分大小写的精确比较，返回 `TextureHandle`。
 
-以下为官方示例 `SamplePlugins/MapPlugins/DXDynamicTextureTest/DXDynamicTextureTest.cs` 的完整实现逻辑（在站台发车牌模型 `"board"` 的 `"tex.png"` 贴图上实时绘制当前时刻与下一班车时间）：
+官方 [DXDynamicTextureTest 插件](../../SamplePlugins/MapPlugins/DXDynamicTextureTest/DXDynamicTextureTest.cs) 使用模型键 `dxdt-test` 和材质纹理 `Stop6.png`，通过 `HasEnoughTimePassed(10)` 检查更新间隔，然后以 `GDIHelper.FillRectWH()` 填充随机颜色。绘图顺序为 `BeginGDI()`、辅助绘图、`EndGDI()`、`TextureHandle.Update()`。使用 `Graphics` 绘制文字时，将调用安排在 HDC 已释放阶段。
 
-```csharp
-using System;
-using System.Drawing;
-using Zbx1425.DXDynamicTexture;
-using BveEx.PluginHost;
-using BveEx.PluginHost.Plugins;
-using BveTypes.ClassWrappers;
-
-namespace BveEx.Sample.DXDynamicTextureTest
-{
-    [Plugin(PluginType.MapPlugin)]
-    public class DXDynamicTextureTest : AssemblyPluginBase
-    {
-        private TextureHandle Handle;
-        private GDIHelper GDIHelper;
-
-        private static readonly Font TextFont = new Font("MS Gothic", 32);
-        private static readonly Font SubTextFont = new Font("MS Gothic", 24);
-
-        public DXDynamicTextureTest(PluginBuilder builder) : base(builder)
-        {
-            BveHacker.ScenarioCreated += OnScenarioCreated;
-        }
-
-        public override void Dispose()
-        {
-            Handle?.Dispose();
-            GDIHelper?.Dispose();
-            BveHacker.ScenarioCreated -= OnScenarioCreated;
-        }
-
-        private void OnScenarioCreated(ScenarioCreatedEventArgs e)
-        {
-            // 1. 从地图模型字典中获取键名为 "board" 的 3D 模型
-            Model targetModel = e.Scenario.Map.StructureModels["board"];
-
-            // 2. 将该模型中的 "tex.png" 贴图注册为动态可替换贴图（宽高需为 2 的幂）
-            Handle = targetModel.Register("tex.png");
-            GDIHelper = new GDIHelper(Handle.Width, Handle.Height);
-        }
-
-        public override void Tick(TimeSpan elapsed)
-        {
-            // 仅当距上次重绘超过一定间隔或贴图处于视野可见范围内时才更新（节省性能）
-            if (!Handle.HasEnoughTimePassed(5)) return;
-
-            TimeSpan time = BveHacker.Scenario.TimeManager.Time;
-
-            GDIHelper.BeginGDI();
-            GDIHelper.Graphics.Clear(Color.Black);
-
-            // 使用 GDI+ 绘制文字与图形
-            GDIHelper.Graphics.FillRectangle(Brushes.Green, 110, 96, 80, 36);
-            GDIHelper.Graphics.DrawString(
-                $"当前时刻  {time.Hours:D2}:{time.Minutes:D2}:{time.Seconds:D2}",
-                SubTextFont, Brushes.White, 60, 200);
-            GDIHelper.Graphics.DrawString(
-                "普通  10:00",
-                TextFont, Brushes.Orange, 200, 96);
-
-            GDIHelper.EndGDI();
-
-            // 将 GDI 位图提交到 Direct3D 贴图表面
-            Handle.Update(GDIHelper);
-        }
-    }
-}
-```
+模型资源对应关系、完整常规绘制插件、鼠标交互插件、清单部署和资源释放规则见 [DXDynamicTexture 专题](extensions/dynamic-texture.md#6-官方示例与完整实践代码)。
 
 ---
 
