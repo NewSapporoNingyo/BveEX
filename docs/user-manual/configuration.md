@@ -160,17 +160,28 @@ Input Devices\
 
 ### `Extensions\PluginUsing.xml`（可选清单）
 
-`Extensions\` 的自动扫描只覆盖程序集形式的扩展。若要在扩展目录中放置脚本插件包，或需要显式控制装载条目，可手动创建 `Extensions\PluginUsing.xml`，语法完全遵循第 4 节——但注意此清单**不能**包含 `Native` 元素（原生插件只能作为车辆插件使用）：
+`Extensions\` 自动扫描程序集形式的扩展。脚本扩展或通过清单指定的程序集使用 `Extensions\PluginUsing.xml`，语法见第 4 节。`Native` 元素适用于车辆插件清单。下例中的程序集位于版本目录的 `ExplicitExtensions\`，脚本包位于扩展目录的 `Scripts\`：
 
 ```xml
 <?xml version="1.0" encoding="utf-8" ?>
 <BveExPluginUsing>
-    <Assembly Path="BveEx.Extensions.Something.dll" />
+    <Assembly Path="..\ExplicitExtensions\BveEx.Extensions.Something.dll" />
     <CSharpScript PackageManifestPath="Scripts\ExtensionScripts\Package.xml" />
 </BveExPluginUsing>
 ```
 
-核心初始化时，目录扫描结果与该清单的条目会一起装载；已加载的扩展可在“版本信息与已加载插件”窗体的扩展页签中查看。该页签支持右键“启用 / 停用”一个个别扩展（仅当扩展声明了可停用能力 `ITogglableExtension`），停用状态会由第 10 节的状态文件在 BVE 退出时保存、下次启动恢复。
+核心初始化时，先按清单中的元素顺序取得条目，再拼接递归目录扫描结果并依次加载。目录扫描使用 `Directory.GetFiles()` 的枚举结果。程序集路径相对于清单所在目录解析；清单中的程序集放在扫描目录之外，每份扩展保留一个加载入口。依据见 [`ExtensionSetFactory`](../../BveEx/Plugins/Extensions/ExtensionSetFactory.cs)、[`PluginSourceSet.FromDirectory()`](../../BveEx/Plugins/PluginSourceSet.FromDirectory.cs) 和 [`PluginSourceSet.Concat()`](../../BveEx/Plugins/PluginSourceSet.Concat.cs)。
+
+> [!WARNING]
+> 上游加载器会将同一程序集的清单条目和扫描条目分别处理，可能重复构造扩展、注册补丁，并在扩展类型字典中产生重复键。检查范围包括 `Extensions\` 的全部子目录。
+
+已加载的扩展可在“版本信息与已加载插件”窗体的扩展页签中查看。支持 `ITogglableExtension` 且带有相应特性的扩展提供右键“启用 / 停用”操作，状态由第 10 节的状态文件在 BVE 退出时保存、下次启动恢复。
+
+### ATS 数组扩展 `AtsArrayExtender`
+
+将配套的 `AtsArrayExtender.dll` 和 `BveEx.CoreExtensions.dll` 保留在版本目录的 `Extensions\` 中，通过目录扫描加载。`AtsArrayExtender.dll` 在 `AtsPlugin` 构造完成后，将面板、音效及配套状态数组统一设为 `1024` 项；车辆插件通过核心扩展提供的 `INative` 访问这些数组。
+
+部署调整后重启 BVE，再加载场景检查 `INative.AtsPanelArray.Count` 和 `AtsSoundArray.Count`。音效包装器在构造时缓存数组引用，实际容量与补丁时序有关。四个扩容目标、完整插件和资源示例、引用缓存及宿主验证清单见 [AtsArrayExtender 专题](../plugin-development/extensions/ats-array-extender.md)；常规面板与音效操作见[车辆指南](../plugin-development/vehicle-plugins.md)。
 
 > [!WARNING]
 > 不要把车辆插件、地图插件 DLL 放进 `Extensions\`。它们的核心代码属于别的插件类型，会被按“扩展”解析并以类型不匹配错误弹窗。

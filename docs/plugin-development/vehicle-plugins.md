@@ -24,7 +24,7 @@
 | :--- | :--- | :--- |
 | **开发语言与运行环境** | C / C++（或需配置非托管导出的 C#），需区分 32 位 / 64 位编译 | .NET Framework 4.8（`AnyCPU`），自动适配 32 位与 64 位 BVE 宿主 |
 | **多插件支持** | BVE 原生仅支持单个 DLL，多插件需借助第三方 `DetailManager.dll` 转发 | 原生支持在 `VehiclePluginUsing.xml` 中挂载任意数量的程序集、传统原生 ATS DLL 与脚本 |
-| **传统 ATS 接口（面板/音效/地上子/按键）** | 通过 `Elapse`、`SetBeaconData`、`KeyDown` 等导出函数被动接收 | 通过核心扩展 `INative`（`BveEx.Extensions.Native`）以面向对象属性与事件方式访问，且默认支持 `AtsArrayExtender` 扩容至 1024 项 |
+| **传统 ATS 接口（面板/音效/地上子/按键）** | 通过 `Elapse`、`SetBeaconData`、`KeyDown` 等导出函数被动接收 | 通过核心扩展 `INative`（`BveEx.Extensions.Native`）以属性与事件方式访问；加载 `AtsArrayExtender.dll` 后，四个底层面板、音效数组扩容至 1024 项，访问时检查实际集合容量 |
 | **车辆与场景内部对象访问** | 无法访问，仅能读写受限的 `ATS_VEHICLESTATE` 与 `ATS_HANDLES` | 可通过 `BveHacker` 直接读写 `Scenario`、`Vehicle`（风缸气路、主电路、动力学、车门、车掌、2D 面板元素等） |
 | **地图插件通信** | 仅能依靠地上子（Beacon）单向传值 | 可在 `Plugins.AllPluginsLoaded` 后直接获取地图插件实例，调用公开属性、方法与事件 |
 
@@ -276,24 +276,19 @@ INative native = Extensions.GetExtension<INative>();
 
 ### 3.3 驾驶台 ATS 面板状态量控制（`AtsPanelArray`）
 
-在车辆的 `Panel.txt`（或 `Panel.cfg`）中，仪表元素（如 `[PilotLamp]`、`[Needle]`、`[DigitalNumber]`）通常将 `Subject` 设置为 `ats0`、`ats1`、`ats2` 等变量。在列车插件中，只需读写 `Native.AtsPanelArray[index]`（类型为 `IList<int>`）即可实时控制对应的仪表显示。
+在车辆的 `Panel.txt`（或 `Panel.cfg`）中，仪表元素（如 `[PilotLamp]`、`[Needle]`、`[DigitalNumber]`）通过 `Subject = ats0`、`ats1`、`ats2` 等变量指定输入。列车插件通过 `Native.AtsPanelArray[index]`（类型为 `IList<int>`）输出对应的整数状态量。
 
-#### 为什么必须使用 `Native.AtsPanelArray` 而不是 `AtsPlugin.PanelArray`？
-在 BVE 原生流程中，`AtsPlugin.OnElapse()` 内部会先调用原生 DLL 的 `Elapse`，随即将 `AtsPlugin.PanelArray`（`int[]`）中的值拷贝到用于渲染驾驶台的 `AtsPlugin.StateStore.PanelArray`（`double[]`）中。
-由于 BveEX 插件的 `Tick()` 是在 `AtsPlugin.OnElapse()` 的 **Postfix（后置补丁）** 中执行的，此时 BVE 原生的数组拷贝动作已经结束。如果你直接修改 `BveHacker.Scenario.Vehicle.Instruments.AtsPlugin.PanelArray[i]`，修改后的值要等到下一帧（甚至被原生 DLL 覆盖）才能反映到 `StateStore`。
-而 `Native.AtsPanelArray` 的底层包装类 `PanelArray` 在索引器 `set` 中实现了**双写同步**：
+#### `Native.AtsPanelArray` 的双写同步
 
-```csharp
-// BveEx.CoreExtensions 内部实现原理：
-AtsPlugin.PanelArray[index] = value;
-AtsPlugin.StateStore.PanelArray[index] = value;
-```
+[`PanelArray`](../../Extensions/BveEx.CoreExtensions/Native/PanelArray.cs) 在索引器 setter 中依次写入 `AtsPlugin.PanelArray[index]`（`int`）和 `AtsPlugin.StateStore.PanelArray[index]`（`double`）。两个数组引用每次从当前宿主字段读取。
 
-因此，通过 `Native.AtsPanelArray[index] = value` 赋值会在**当前帧立即生效**。
+通过 `Native.AtsPanelArray[index] = value` 赋值，同一 setter 调用便会更新 ATS 输出和面板状态存储。插件的 `Tick()` 位于 `AtsPlugin.OnElapse` 的 `Postfix`，后续状态量读取和绘制时机依赖 BVE 宿主实现。数组和资源间的数据流见 [AtsArrayExtender 专题](extensions/ats-array-extender.md)。
 
 #### 面板数组容量与 `AtsArrayExtender` 扩容
-- **BVE 原生默认上限**：长度为 `256`（有效索引为 `0`～`255`，对应 `ats0`～`ats255`）。
-- **BveEX 默认扩容上限**：BveEX 默认随附并启用了官方核心扩展 `BveEx.Extensions.AtsArrayExtender.dll`，它会自动将 `PanelArray`、`StateStore.PanelArray`、`SoundArray` 与 `OldSoundArray` 统一扩容为 **`1024`**（有效索引为 `0`～`1023`，对应 `ats0`～`ats1023`）。详细机制可参阅《[AtsArrayExtender (ATS 变量数组扩展)](extensions/ats-array-extender.md)》。
+
+- **BVE 官方面板变量范围**：`ats0～ats255`，格式依据见 [BVE 面板文档](https://bvets.net/jp/edit/formats/vehicle/panel.html)。
+- **扩容实现**：版本目录 `Extensions\` 下的 `AtsArrayExtender.dll` 在 `AtsPlugin` 构造完成后，将 `PanelArray`、`StateStore.PanelArray`、`SoundArray` 与 `OldSoundArray` 替换为 **`1024`** 项数组，有效索引为 `0～1023`。
+- **使用检查**：通过 `INative` 访问时，以 `AtsPanelArray.Count` 和 `AtsSoundArray.Count` 为实际容量。高索引资源的解析和显示依赖 BVE 宿主实现，完整示例、引用缓存及验证清单见 [AtsArrayExtender 专题](extensions/ats-array-extender.md#capacity)。
 
 #### 实战示例：控制驾驶台指示灯与指针（源自官方示例 `AtsPanelValueTest`）
 
@@ -356,13 +351,14 @@ BveEX 在 `BveEx.Extensions.Native` 命名空间下提供了强类型的 `SoundP
 | :--- | :---: | :--- | :--- |
 | `SoundPlayMode.Stop` | `-10000` | `ATS_SOUND_STOP` | 停止播放该音效。 |
 | `SoundPlayMode.PlayLooping` | `0` | `ATS_SOUND_PLAYLOOPING` | 以原始音量（$0\text{ dB}$ 衰减）循环播放该音效。 |
-| `SoundPlayMode.Play` | `1` | `ATS_SOUND_PLAY` | 单次播放该音效（写入后底层会自动触发播放并将数组值复位为 `2`）。 |
+| `SoundPlayMode.Play` | `1` | `ATS_SOUND_PLAY` | 与历史命令值相异时触发单次播放请求，并将缓存数组本项改为 `2`。 |
 | `SoundPlayMode.Continue` | `2` | `ATS_SOUND_CONTINUE` | 保持上一帧的播放状态不变。 |
 
-`SoundPlayCommands` 提供了以下 3 个静态/扩展方法：
-1. **`mode.ToCommand()`**：将 `SoundPlayMode` 枚举转换为对应的 `int` 指令值（如 `SoundPlayMode.Play.ToCommand()` 返回 `1`）。
-2. **`SoundPlayCommands.PlayLooping(int volume)`**：生成**带音量衰减的循环播放指令**。参数 `volume` 必须满足 `-10000 <= volume <= 0`（单位为 $1/100\text{ dB}$，即毫贝尔 $\text{mB}$；`0` 表示最大音量，`-10000` 等同于停止播放，若传入 `> 0` 的值会抛出 `ArgumentOutOfRangeException`）。
-3. **`SoundPlayCommands.GetMode(int command)`**：将当前 `Native.AtsSoundArray[index]` 中的整数值反向解析为 `SoundPlayMode` 枚举（其中 `<= -10000` 解析为 `Stop`，`-9999`～`0` 均解析为 `PlayLooping`，`1` 为 `Play`，`2` 为 `Continue`）。
+[`SoundPlayCommands`](../../Extensions/BveEx.CoreExtensions/Native/SoundPlayCommands.cs) 提供以下 3 个静态/扩展方法：
+
+1. **`mode.ToCommand()`**：将 `SoundPlayMode` 枚举直接转换为 `int` 指令值，如 `SoundPlayMode.Play.ToCommand()` 返回 `1`。
+2. **`SoundPlayCommands.PlayLooping(int volume)`**：接受全部 `volume <= 0` 的整数并原样返回，正数抛出 `ArgumentOutOfRangeException`。音量及停止命令交由宿主处理；`GetMode()` 将 `<= -10000` 的值归类为 `Stop`。
+3. **`SoundPlayCommands.GetMode(int command)`**：`<= -10000` 解析为 `Stop`，`-9999～0` 解析为 `PlayLooping`，`1` 解析为 `Play`，其余正数解析为 `Continue`。
 
 ```csharp
 // 1. 单次播放 2 号 ATS 音效（如确认按钮音）
@@ -379,9 +375,7 @@ if (SoundPlayCommands.GetMode(Native.AtsSoundArray[0]) == SoundPlayMode.PlayLoop
 ```
 
 > [!WARNING]
-> **上游代码已知行为特性（`SoundArray` 引用缓存与加载顺序）**：
-> 在 [`SoundArray.cs`](file:///e:/github/BveEX/Extensions/BveEx.CoreExtensions/Native/SoundArray.cs#L42-L46) 中，`SoundArray` 在构造时将 `AtsPlugin.SoundArray` 的引用缓存到了 `readonly int[] Array` 字段中（而 `PanelArray` 则是每次通过属性动态读取 `AtsPlugin.PanelArray`）。
-> 默认情况下，因为 `Extensions\` 目录下的 `BveEx.Extensions.AtsArrayExtender.dll` 按文件名字母序排在 `BveEx.CoreExtensions.dll` 之前，扩容补丁先执行，`Native.AtsSoundArray` 能正常获得扩容后的 `1024` 长度数组。但如果你在 `Extensions\PluginUsing.xml` 中手动调整了扩展加载顺序，使 `BveEx.CoreExtensions` 先于 `AtsArrayExtender` 加载，则 `Native.AtsSoundArray` 内部缓存的 `Array` 仍会指向扩容前长度为 `256` 的旧数组，访问 `256` 以上的索引会抛出 `IndexOutOfRangeException`。因此**切勿修改 `Extensions` 目录下这两个核心扩展的默认加载顺序**。
+> 上游代码存在音效数组引用缓存的顺序依赖：[`SoundArray`](../../Extensions/BveEx.CoreExtensions/Native/SoundArray.cs) 将构造时的 `AtsPlugin.SoundArray` 保存到 `readonly IList<int> Array` 字段。若包装器先于扩容回调创建，它继续访问原数组。目录加载使用 `Directory.GetFiles()` 的枚举结果，两个构造函数补丁的注册调用采用默认优先级参数。访问扩展区前核对 `INative.AtsSoundArray.Count` 与当前宿主数组长度；诊断和宿主验证步骤见[专题第 7.1 节](extensions/ats-array-extender.md#sound-order)。
 
 ### 3.5 ATS 按键输入监听（`AtsKeySet` 与 `AtsKey`）
 
@@ -1307,7 +1301,7 @@ private void OnAllPluginsLoaded(object sender, EventArgs e)
 
 ### 7.4 传统原生 ATS 插件（`<Native>`）的混用与手柄串联原理
 
-在 `VehiclePluginUsing.xml` 中，你可以通过 `<Native Path="..." />` 挂载一个或多个传统的 Win32 ATS 插件（C/C++ `.dll`），并与其他 `<Assembly>` 托管列车插件协同工作。了解 [`NativePlugin.cs`](file:///e:/github/BveEX/BveEx/Plugins/Native/NativePlugin.cs) 的底层机制有助于合理编排 XML 中的声明顺序：
+在 `VehiclePluginUsing.xml` 中，你可以通过 `<Native Path32="..." Path64="..." />` 挂载一个或多个传统的 Win32 ATS 插件（C/C++ `.dll`），并与其他 `<Assembly>` 托管列车插件协同工作。了解 [`NativePlugin.cs`](../../BveEx/Plugins/Native/NativePlugin.cs) 的底层机制有助于合理编排 XML 中的声明顺序：
 
 1. **多个 `<Native>` 插件的手柄串联机制（内置 `DetailManager` 逻辑）**：
    - 每个 `<Native>` 插件在构造时都会订阅 `AtsPlugin.AtsHandles` 的 `PowerChanged`、`BrakeChanged`、`ReverserChanged` 事件；
@@ -1316,7 +1310,7 @@ private void OnAllPluginsLoaded(object sender, EventArgs e)
 2. **所有列车插件的 `Tick` 执行顺序**：
    - BveEX 会严格按照 **`VehiclePluginUsing.xml` 中从上到下的声明顺序** 依次调用各个插件的 `Tick` 方法；
    - **关于手柄（`AtsHandles`）**：若你的 C# `<Assembly>` 插件需要根据传统 `<Native>` 插件输出的制动段位做二次判断，请将 `<Assembly>` 放在 `<Native>` **之后**；反之，若 `<Assembly>` 直接修改 `AtsHandles`，排在它后面的 `<Native>` 插件也会收到 `SetBrake` / `SetPower` 通知；
-   - **关于面板与音效（`AtsPanelArray` / `AtsSoundArray`）**：每个 `<Native>` 插件在每帧 `Tick` 时会将完整的 256 项 `PanelBuffer` 与 `SoundBuffer` 写入 `INative.AtsPanelArray` 和 `INative.AtsSoundArray`。因此，如果你的 C# `<Assembly>` 插件需要覆盖前序 `<Native>` 插件写入的某个 `ats` 面板索引值，**必须将 `<Assembly>` 声明在 `<Native>` 节点的下方**！
+   - **关于面板与音效（`AtsPanelArray` / `AtsSoundArray`）**：`NativePlugin.Tick()` 直接将当前 `AtsPlugin.PanelArray` 和 `SoundArray` 传给 DLL 的 `Elapse`，原生插件按自身实现使用索引。托管插件通过 `INative` 索引器赋值时执行面板双写或音效请求分支；将托管插件放在对应 `<Native>` 条目之后，可在自己的 `Tick()` 中处理前序调用的输出。互操作回写、状态存储和资源绑定的验证见 [AtsArrayExtender 专题](extensions/ats-array-extender.md)。
 
 ---
 

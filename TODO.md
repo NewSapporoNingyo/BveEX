@@ -7,9 +7,9 @@
 | 文档板块 | 规划篇数 | 已有正文 | 待编写 |
 | --- | ---: | ---: | ---: |
 | 用户手册 | 3 | 3 | 0 |
-| 插件开发者文档 | 8 | 5 | 3 |
+| 插件开发者文档 | 8 | 6 | 2 |
 | 核心开发者文档 | 6 | 0 | 6 |
-| 合计 | 17 | 8 | 9 |
+| 合计 | 17 | 9 | 8 |
 
 ## 1. 用户手册
 
@@ -99,15 +99,15 @@
 
 ### 2.6 AtsArrayExtender 专题
 
-目标文档：`docs/plugin-development/extensions/ats-array-extender.md`。
+文档：[docs/plugin-development/extensions/ats-array-extender.md](docs/plugin-development/extensions/ats-array-extender.md)。
 
 源码入口：`Extensions/BveEx.Extensions.AtsArrayExtender/`；示例入口：`SamplePlugins/VehiclePlugins/AtsPanelValueTest/`。
 
-- [ ] 创建专题文档，说明扩展的部署、加载及与 `INative` 的关系。
-- [ ] 逐项梳理数组扩容的目标、长度、补丁位置与生效时机。
-- [ ] 编写通过 `INative` 访问扩展后数组的完整插件示例。
-- [ ] 对照 `AtsPanelValueTest` 说明索引使用方式、数据流与边界行为。
-- [ ] 汇总资源与兼容限制，并补齐车辆指南和配置手册的交叉引用。
+- [x] 创建专题文档，说明扩展的部署、加载及与 `INative` 的关系。
+- [x] 逐项梳理数组扩容的目标、长度、补丁位置与生效时机。
+- [x] 编写通过 `INative` 访问扩展后数组的完整插件示例。
+- [x] 对照 `AtsPanelValueTest` 说明索引使用方式、数据流与边界行为。
+- [x] 汇总资源与兼容限制，并补齐车辆指南和配置手册的交叉引用。
 
 ### 2.7 DXDynamicTexture 专题
 
@@ -206,7 +206,7 @@
 ## 4. 全局补充与验收
 
 - [ ] 建立文档导航索引，串联用户、插件开发者、核心开发者三条阅读路径。
-- [ ] 补齐当前 11 处指向待编写页面的本地链接，并在目标文档创建后复查链接和章节锚点。
+- [ ] 补齐当前 9 处指向待编写页面的本地链接，并在目标文档创建后复查链接和章节锚点。
 - [ ] 将快速入门和生命周期文档中“14 个官方示例”的表述统一为当前 16 个工程，并同步示例索引。
 - [ ] 建立公共 API 与文档的覆盖对照表，逐项核对 `BveEx.PluginHost`、`BveTypes` 和全部官方扩展。
 - [ ] 补齐官方核心扩展的 API 索引，覆盖 `Native`、`MapStatements`、`SignalPatch`、`PreTrainPatch`、`TrainDrawPatch`、`ConductorPatch`、`SoundFactory`、`ContextMenuHacker`、`DiagramUpdater`、`StructureModelFinder`、`LoadErrorManager` 及 `IMatrixConverter`，关联已有讲解和待补主题。
